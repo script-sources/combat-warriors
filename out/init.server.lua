@@ -1,9 +1,10 @@
 -- Compiled with roblox-ts v2.3.0
 local Players = game:GetService("Players")
-if _G["program id"] then
+if _G["combat-warriors"] then
 	error("This program is already running!")
+else
+	_G["combat-warriors"] = true
 end
-_G["program id"] = true
 --[[
 	***********************************************************
 	 * CONFIGURATIONS
@@ -39,6 +40,7 @@ local Toggle = _binding.Toggle
 local Slider = _binding.Slider
 local Dropdown = _binding.Dropdown
 local MultiDropdown = _binding.MultiDropdown
+local Divider = _binding.Divider
 local KeyPicker = _binding.KeyPicker
 local library = loadstring(game:HttpGet(repo .. "library.lua"))()
 local savemanager = loadstring(game:HttpGet(repo .. "addons/savemanager.lua"))()
@@ -148,7 +150,7 @@ end
 	 * Last updated: Feb. 14, 2024
 	 ***********************************************************
 ]]
-Builder.new():setLibrary(library):windows({ Window.new():title("Muffet Hub | Combat Warriors"):centered(true):autoShow(true):withFadeTime(0):pages({ Page.new():title("Gameplay"):left({ Groupbox.new():title("Auto Parry"):elements({ Toggle.new():index("gameplay.auto_parry.enabled"):title("Enabled"):tooltip("Automatically parry attacks"):default(false):extensions({ KeyPicker.new():index("gameplay.auto_parry.key"):title("Auto Parry"):bind("V"):mode("Hold") }), DependencyBox.new():dependsOn("gameplay.auto_parry.enabled", true):elements({ Toggle.new():index("gameplay.auto_parry.predict_enabled"):title("Predict"):tooltip("Predicts the enemy's velocity, so you can parry in advance."):default(false), DependencyBox.new():dependsOn("gameplay.auto_parry.predict_enabled", true):elements({ Slider.new():index("gameplay.auto_parry.predict_time"):title("Amount"):suffix(" ms"):round(0):limits(10, 400):default(10):compact(true):hideMax(true) }), Toggle.new():index("gameplay.auto_parry.debug"):title("Debugger"):tooltip("Enable debug notifications for Auto Parry"):default(true) }) }) }):right({}), Page.new():title("Target"):left({ Groupbox.new():title("Filters"):elements({ Toggle.new():index("target.filter.team_filter"):title("Team filter"):tooltip("Enables team checking for the filter"):default(false), DependencyBox.new():dependsOn("target.filter.team_filter", false):elements({ MultiDropdown.new():index("target.filter.players"):title("Players"):tooltip("The list of players to whitelist/blacklist"):canNull(true):specialType("Player"), Dropdown.new():index("target.filter.players_type"):title("Player disposition"):tooltip("Sets the selected players as allies or enemies"):options({ "Ally", "Enemy" }):default("Enemy") }), DependencyBox.new():dependsOn("target.filter.team_filter", true):elements({ MultiDropdown.new():index("target.filter.teams"):title("Teams"):tooltip("The list of teams to whitelist/blacklist"):canNull(true):specialType("Team"), Dropdown.new():index("target.filter.teams_type"):title("Team disposition"):tooltip("Sets the selected teams as allies or enemies"):options({ "Ally", "Enemy" }):default("Enemy") }) }) }):right({}), Page.new():title("Settings"):left({}):right({}) }) }):renderUI()
+Builder.new():library(library):windows({ Window.new():title("Muffet Hub | Combat Warriors"):centered(true):autoShow(true):withFadeTime(0):pages({ Page.new():title("Gameplay"):left({ Groupbox.new():title("Auto Parry"):elements({ Toggle.new():index("gameplay.auto_parry.enabled"):title("Enabled"):tooltip("Automatically parry attacks"):default(false):extensions({ KeyPicker.new():index("gameplay.auto_parry.key"):title("Auto Parry"):bind("V"):mode("Hold") }), DependencyBox.new():dependsOn("gameplay.auto_parry.enabled", true):elements({ Toggle.new():index("gameplay.auto_parry.predict_enabled"):title("Predict"):tooltip("Predicts the enemy's velocity, so you can parry in advance."):default(false), DependencyBox.new():dependsOn("gameplay.auto_parry.predict_enabled", true):elements({ Slider.new():index("gameplay.auto_parry.predict_time"):title("Amount"):suffix(" ms"):round(0):limits(10, 400):default(10):compact(true):hideMax(true) }), Toggle.new():index("gameplay.auto_parry.debug"):title("Debugger"):tooltip("Enable debug notifications for Auto Parry"):default(true) }) }) }):right({}), Page.new():title("Target"):left({ Groupbox.new():title("Filters"):elements({ MultiDropdown.new():index("target.filter.players"):title("Players"):tooltip("The list of players to whitelist/blacklist"):canNull(true):specialType("Player"), Dropdown.new():index("target.filter.players_type"):title("Player disposition"):tooltip("Sets the selected players as allies or enemies"):options({ "Ally", "Enemy" }):default("Enemy"), Divider.new(), Toggle.new():index("target.filter.team_filter"):title("Team filter?"):tooltip("Enables team checking for the filter"):default(false), DependencyBox.new():dependsOn("target.filter.team_filter", true):elements({ MultiDropdown.new():index("target.filter.teams"):title("Teams"):tooltip("The list of teams to whitelist/blacklist"):canNull(true):specialType("Team"), Dropdown.new():index("target.filter.teams_type"):title("Team disposition"):tooltip("Sets the selected teams as allies or enemies"):options({ "Ally", "Enemy" }):default("Enemy"), Dropdown.new():index("target.filter.teams_mode"):title("Mode"):options({ "All", "Any" }):default("All") }) }) }):right({}), Page.new():title("Settings"):left({}):right({}) }) }):renderUI()
 --[[
 	***********************************************************
 	 * INITIALIZATION

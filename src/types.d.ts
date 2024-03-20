@@ -1,6 +1,6 @@
 declare global {
 	interface _G {
-		"program id"?: true;
+		"combat-warriors"?: true;
 	}
 }
 

@@ -240,7 +240,11 @@ new Builder()
 											.options(["Ally", "Enemy"])
 											.default("Enemy"),
 
-										new Dropdown<"All" | "Any">(),
+										new Dropdown<"All" | "Any">()
+											.index("target.filter.teams_mode")
+											.title("Mode")
+											.options(["All", "Any"])
+											.default("All"),
 									]),
 							]),
 					])

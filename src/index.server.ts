@@ -1,4 +1,5 @@
 import { Players } from "@rbxts/services";
+import type * as Linoria from "@script-ts/linorialib";
 import { Destructible, Node } from "types";
 
 if (_G["program id"]) throw "This program is already running!";
@@ -22,6 +23,11 @@ const LocalPlayer = Players.LocalPlayer;
  * Description: Helper functions and classes
  * Last updated: Feb. 14, 2024
  ************************************************************/
+const { load, Builder, Window, Page, Groupbox, Tabbox, Tab, DependencyBox, Toggle, Slider, KeyPicker } = loadstring(
+	game.HttpGet("https://raw.githubusercontent.com/scripts-ts/LinoriaLib/main/out/init.lua"),
+)() as typeof Linoria;
+const [library, savemanager, thememanager] = load();
+
 class Bin {
 	private head: Node | undefined;
 	private tail: Node | undefined;
@@ -114,15 +120,69 @@ class BaseComponent<T extends Instance> {
  * Description: Singletons that are used once
  * Last updated: Feb. 14, 2024
  ************************************************************/
-namespace ExampleController {
-	export function __init() {}
-}
+
+/************************************************************
+ * INTERFACE
+ * Description: User interface instantiation
+ * Last updated: Feb. 14, 2024
+ ************************************************************/
+new Builder()
+	.setLibrary(library)
+	.setSaveManager(savemanager)
+	.setThemeManager(thememanager)
+	.windows([
+		new Window()
+			.title("Muffet Hub | Combat Warriors")
+			.centered(true)
+			.autoShow(true)
+			.withFadeTime(0)
+			.pages([
+				new Page()
+					.title("Legit")
+					.left([
+						new Tabbox().tabs([
+							new Tab().title("Auto Parry").elements([
+								new Toggle()
+									.index("legit.auto_parry.enabled")
+									.title("Enabled")
+									.tooltip("Automatically parry attacks")
+									.default(false)
+									.extensions([
+										new KeyPicker()
+											.index("legit.auto_parry.key")
+											.title("Auto Parry")
+											.bind("V")
+											.mode("Hold"),
+									]),
+
+								new DependencyBox()
+									.dependsOn("legit.auto_parry.enabled", true)
+									.elements([
+										new Toggle().index("legit.auto_parry.alerts").title("Alerts").default(true),
+										new Slider()
+											.index("legit.auto_parry.predict")
+											.title("Predict")
+											.suffix(" ms")
+											.compact(true)
+											.hideMax(true)
+											.limits(10, 1000)
+											.default(10),
+									]),
+							]),
+							new Tab().title("Exploiters").elements([]),
+						]),
+					])
+					.right([]),
+				new Page().title("Visuals").left([]).right([]),
+				new Page().title("Settings").left([]).right([]),
+			]),
+	])
+	.renderUI();
 
 /************************************************************
  * INITIALIZATION
  * Description: Initializes and starts the runtime
  * Last updated: Feb. 14, 2024
  ************************************************************/
-ExampleController.__init();
 
 export = "Initialized Successfully";

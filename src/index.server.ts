@@ -3,8 +3,8 @@ import type * as Linoria from "@script-ts/linorialib";
 import { Library } from "@script-ts/linorialib/out/library";
 import { Destructible, Node } from "types";
 
-if (_G["program id"]) throw "This program is already running!";
-_G["program id"] = true;
+if (_G["combat-warriors"]) throw "This program is already running!";
+else _G["combat-warriors"] = true;
 
 /************************************************************
  * CONFIGURATIONS
@@ -37,6 +37,7 @@ const {
 	Slider,
 	Dropdown,
 	MultiDropdown,
+	Divider,
 	KeyPicker,
 } = loadstring(game.HttpGet(repo + "init.lua"))() as typeof Linoria;
 const library = loadstring(game.HttpGet(repo + "library.lua"))() as Library;
@@ -142,7 +143,7 @@ class BaseComponent<T extends Instance> {
  * Last updated: Feb. 14, 2024
  ************************************************************/
 new Builder()
-	.setLibrary(library)
+	.library(library)
 	.windows([
 		new Window()
 			.title("Muffet Hub | Combat Warriors")
@@ -203,27 +204,26 @@ new Builder()
 						new Groupbox()
 							.title("Filters")
 							.elements([
+								new MultiDropdown()
+									.index("target.filter.players")
+									.title("Players")
+									.tooltip("The list of players to whitelist/blacklist")
+									.canNull(true)
+									.specialType("Player"),
+								new Dropdown<"Ally" | "Enemy">()
+									.index("target.filter.players_type")
+									.title("Player disposition")
+									.tooltip("Sets the selected players as allies or enemies")
+									.options(["Ally", "Enemy"])
+									.default("Enemy"),
+
+								new Divider(),
+
 								new Toggle()
 									.index("target.filter.team_filter")
-									.title("Team filter")
+									.title("Team filter?")
 									.tooltip("Enables team checking for the filter")
 									.default(false),
-								new DependencyBox()
-									.dependsOn("target.filter.team_filter", false)
-									.elements([
-										new MultiDropdown()
-											.index("target.filter.players")
-											.title("Players")
-											.tooltip("The list of players to whitelist/blacklist")
-											.canNull(true)
-											.specialType("Player"),
-										new Dropdown<"Ally" | "Enemy">()
-											.index("target.filter.players_type")
-											.title("Player disposition")
-											.tooltip("Sets the selected players as allies or enemies")
-											.options(["Ally", "Enemy"])
-											.default("Enemy"),
-									]),
 								new DependencyBox()
 									.dependsOn("target.filter.team_filter", true)
 									.elements([
@@ -239,6 +239,8 @@ new Builder()
 											.tooltip("Sets the selected teams as allies or enemies")
 											.options(["Ally", "Enemy"])
 											.default("Enemy"),
+
+										new Dropdown<"All" | "Any">(),
 									]),
 							]),
 					])

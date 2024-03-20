@@ -143,8 +143,6 @@ class BaseComponent<T extends Instance> {
  ************************************************************/
 new Builder()
 	.setLibrary(library)
-	.setSaveManager(savemanager)
-	.setThemeManager(thememanager)
 	.windows([
 		new Window()
 			.title("Muffet Hub | Combat Warriors")
@@ -152,9 +150,8 @@ new Builder()
 			.autoShow(true)
 			.withFadeTime(0)
 			.pages([
-				// Melee
 				new Page()
-					.title("Melee")
+					.title("Gameplay")
 					.left([
 						new Groupbox().title("Auto Parry").elements([
 							new Toggle()
@@ -173,23 +170,48 @@ new Builder()
 							new DependencyBox()
 								.dependsOn("legit.auto_parry.enabled", true)
 								.elements([
-									new Toggle().index("legit.auto_parry.alerts").title("Alerts").default(true),
+									new Toggle()
+										.index("legit.auto_parry.alerts")
+										.title("Debug Mode")
+										.tooltip("Auto Parry sends debug notifications")
+										.default(true),
 									new Slider()
 										.index("legit.auto_parry.predict")
 										.title("Predict")
 										.suffix(" ms")
-										.compact(true)
-										.hideMax(true)
+										.round(0)
 										.limits(10, 1000)
-										.default(10),
+										.default(10)
+										.compact(true)
+										.hideMax(true),
 								]),
 						]),
+						new Groupbox()
+							.title("Hitbox Filter")
+							.elements([
+								new MultiDropdown()
+									.index("legit.hitboxes.players")
+									.title("Players")
+									.tooltip("The list of players to whitelist/blacklist")
+									.canNull(true)
+									.specialType("Player"),
+								new Toggle()
+									.index("legit.hitboxes.whitelist")
+									.title("Whitelist?")
+									.tooltip("If enabled, only the selected players will be targeted")
+									.default(false),
+								new Slider()
+									.index("legit.hitboxes.probability")
+									.title("Chance")
+									.suffix("%")
+									.round(0)
+									.limits(0, 100)
+									.default(50)
+									.hideMax(true)
+									.compact(true),
+							]),
 					])
 					.right([]),
-
-				// Ranged
-				new Page().title("Ranged").left([]).right([]),
-				new Page().title("Visuals").left([]).right([]),
 				new Page().title("Settings").left([]).right([]),
 			]),
 	])

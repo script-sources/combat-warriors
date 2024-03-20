@@ -151,8 +151,9 @@ new Builder()
 			.autoShow(true)
 			.withFadeTime(0)
 			.pages([
+				// Melee
 				new Page()
-					.title("Legit")
+					.title("Melee")
 					.left([
 						new Groupbox().title("Auto Parry").elements([
 							new Toggle()
@@ -184,6 +185,9 @@ new Builder()
 						]),
 					])
 					.right([]),
+
+				// Ranged
+				new Page().title("Ranged").left([]).right([]),
 				new Page().title("Visuals").left([]).right([]),
 				new Page().title("Settings").left([]).right([]),
 			]),

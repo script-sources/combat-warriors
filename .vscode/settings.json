@@ -49,17 +49,7 @@
 		"**/.svn": true,
 		"**/.hg": true,
 		"**/CVS": true,
-		"**/.DS_Store": true,
-		".vscode/": true,
-		"package-lock.json": true,
-		"node_modules/": true,
-		"include/": true,
-		".eslintrc": true,
-		".gitignore": true,
-		".prettierrc": true,
-		"default.project.json": true,
-		"package.json": true,
-		"tsconfig.json": true
+		"**/.DS_Store": true
 	},
-	"hidefiles.selectedProfile": "Strict"
+	"hidefiles.selectedProfile": "Show All Files"
 }

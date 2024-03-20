@@ -1,5 +1,6 @@
 import { Players } from "@rbxts/services";
 import type * as Linoria from "@script-ts/linorialib";
+import { Library } from "@script-ts/linorialib/out/library";
 import { Destructible, Node } from "types";
 
 if (_G["program id"]) throw "This program is already running!";
@@ -23,8 +24,8 @@ const LocalPlayer = Players.LocalPlayer;
  * Description: Helper functions and classes
  * Last updated: Feb. 14, 2024
  ************************************************************/
+const repo = "https://raw.githubusercontent.com/scripts-ts/LinoriaLib/main/out/";
 const {
-	load,
 	Builder,
 	Window,
 	Page,
@@ -37,10 +38,10 @@ const {
 	Dropdown,
 	MultiDropdown,
 	KeyPicker,
-} = loadstring(
-	game.HttpGet("https://raw.githubusercontent.com/scripts-ts/LinoriaLib/main/out/init.lua"),
-)() as typeof Linoria;
-const [library, savemanager, thememanager] = load();
+} = loadstring(game.HttpGet(repo + "init.lua"))() as typeof Linoria;
+const library = loadstring(game.HttpGet(repo + "library.lua"))() as Library;
+const savemanager = loadstring(game.HttpGet(repo + "addons/savemanager.lua"))();
+const thememanager = loadstring(game.HttpGet(repo + "addons/thememanager.lua"))();
 
 class Bin {
 	private head: Node | undefined;

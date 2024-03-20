@@ -23,7 +23,21 @@ const LocalPlayer = Players.LocalPlayer;
  * Description: Helper functions and classes
  * Last updated: Feb. 14, 2024
  ************************************************************/
-const { load, Builder, Window, Page, Groupbox, Tabbox, Tab, DependencyBox, Toggle, Slider, KeyPicker } = loadstring(
+const {
+	load,
+	Builder,
+	Window,
+	Page,
+	Groupbox,
+	Tabbox,
+	Tab,
+	DependencyBox,
+	Toggle,
+	Slider,
+	Dropdown,
+	MultiDropdown,
+	KeyPicker,
+} = loadstring(
 	game.HttpGet("https://raw.githubusercontent.com/scripts-ts/LinoriaLib/main/out/init.lua"),
 )() as typeof Linoria;
 const [library, savemanager, thememanager] = load();
@@ -140,36 +154,33 @@ new Builder()
 				new Page()
 					.title("Legit")
 					.left([
-						new Tabbox().tabs([
-							new Tab().title("Auto Parry").elements([
-								new Toggle()
-									.index("legit.auto_parry.enabled")
-									.title("Enabled")
-									.tooltip("Automatically parry attacks")
-									.default(false)
-									.extensions([
-										new KeyPicker()
-											.index("legit.auto_parry.key")
-											.title("Auto Parry")
-											.bind("V")
-											.mode("Hold"),
-									]),
+						new Groupbox().title("Auto Parry").elements([
+							new Toggle()
+								.index("legit.auto_parry.enabled")
+								.title("Enabled")
+								.tooltip("Automatically parry attacks")
+								.default(false)
+								.extensions([
+									new KeyPicker()
+										.index("legit.auto_parry.key")
+										.title("Auto Parry")
+										.bind("V")
+										.mode("Hold"),
+								]),
 
-								new DependencyBox()
-									.dependsOn("legit.auto_parry.enabled", true)
-									.elements([
-										new Toggle().index("legit.auto_parry.alerts").title("Alerts").default(true),
-										new Slider()
-											.index("legit.auto_parry.predict")
-											.title("Predict")
-											.suffix(" ms")
-											.compact(true)
-											.hideMax(true)
-											.limits(10, 1000)
-											.default(10),
-									]),
-							]),
-							new Tab().title("Exploiters").elements([]),
+							new DependencyBox()
+								.dependsOn("legit.auto_parry.enabled", true)
+								.elements([
+									new Toggle().index("legit.auto_parry.alerts").title("Alerts").default(true),
+									new Slider()
+										.index("legit.auto_parry.predict")
+										.title("Predict")
+										.suffix(" ms")
+										.compact(true)
+										.hideMax(true)
+										.limits(10, 1000)
+										.default(10),
+								]),
 						]),
 					])
 					.right([]),

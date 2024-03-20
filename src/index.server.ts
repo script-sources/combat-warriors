@@ -155,60 +155,91 @@ new Builder()
 					.left([
 						new Groupbox().title("Auto Parry").elements([
 							new Toggle()
-								.index("legit.auto_parry.enabled")
+								.index("gameplay.auto_parry.enabled")
 								.title("Enabled")
 								.tooltip("Automatically parry attacks")
 								.default(false)
 								.extensions([
 									new KeyPicker()
-										.index("legit.auto_parry.key")
+										.index("gameplay.auto_parry.key")
 										.title("Auto Parry")
 										.bind("V")
 										.mode("Hold"),
 								]),
 
 							new DependencyBox()
-								.dependsOn("legit.auto_parry.enabled", true)
+								.dependsOn("gameplay.auto_parry.enabled", true)
 								.elements([
 									new Toggle()
-										.index("legit.auto_parry.alerts")
-										.title("Debug Mode")
-										.tooltip("Auto Parry sends debug notifications")
-										.default(true),
-									new Slider()
-										.index("legit.auto_parry.predict")
+										.index("gameplay.auto_parry.predict_enabled")
 										.title("Predict")
-										.suffix(" ms")
-										.round(0)
-										.limits(10, 1000)
-										.default(10)
-										.compact(true)
-										.hideMax(true),
+										.tooltip("Predicts the enemy's velocity, so you can parry in advance.")
+										.default(false),
+									new DependencyBox()
+										.dependsOn("gameplay.auto_parry.predict_enabled", true)
+										.elements([
+											new Slider()
+												.index("gameplay.auto_parry.predict_time")
+												.title("Amount")
+												.suffix(" ms")
+												.round(0)
+												.limits(10, 400)
+												.default(10)
+												.compact(true)
+												.hideMax(true),
+										]),
+									new Toggle()
+										.index("gameplay.auto_parry.debug")
+										.title("Debugger")
+										.tooltip("Enable debug notifications for Auto Parry")
+										.default(true),
 								]),
 						]),
+					])
+					.right([]),
+				new Page()
+					.title("Target")
+					.left([
 						new Groupbox()
-							.title("Hitbox Filter")
+							.title("Filters")
 							.elements([
-								new MultiDropdown()
-									.index("legit.hitboxes.players")
-									.title("Players")
-									.tooltip("The list of players to whitelist/blacklist")
-									.canNull(true)
-									.specialType("Player"),
 								new Toggle()
-									.index("legit.hitboxes.whitelist")
-									.title("Whitelist?")
-									.tooltip("If enabled, only the selected players will be targeted")
+									.index("target.filter.team_filter")
+									.title("Team filter")
+									.tooltip("Enables team checking for the filter")
 									.default(false),
-								new Slider()
-									.index("legit.hitboxes.probability")
-									.title("Chance")
-									.suffix("%")
-									.round(0)
-									.limits(0, 100)
-									.default(50)
-									.hideMax(true)
-									.compact(true),
+								new DependencyBox()
+									.dependsOn("target.filter.team_filter", false)
+									.elements([
+										new MultiDropdown()
+											.index("target.filter.players")
+											.title("Players")
+											.tooltip("The list of players to whitelist/blacklist")
+											.canNull(true)
+											.specialType("Player"),
+										new Dropdown<"Ally" | "Enemy">()
+											.index("target.filter.players_type")
+											.title("Player disposition")
+											.tooltip("Sets the selected players as allies or enemies")
+											.options(["Ally", "Enemy"])
+											.default("Enemy"),
+									]),
+								new DependencyBox()
+									.dependsOn("target.filter.team_filter", true)
+									.elements([
+										new MultiDropdown()
+											.index("target.filter.teams")
+											.title("Teams")
+											.tooltip("The list of teams to whitelist/blacklist")
+											.canNull(true)
+											.specialType("Team"),
+										new Dropdown<"Ally" | "Enemy">()
+											.index("target.filter.teams_type")
+											.title("Team disposition")
+											.tooltip("Sets the selected teams as allies or enemies")
+											.options(["Ally", "Enemy"])
+											.default("Enemy"),
+									]),
 							]),
 					])
 					.right([]),
@@ -216,6 +247,12 @@ new Builder()
 			]),
 	])
 	.renderUI();
+
+interface Toggles {}
+interface Options {}
+
+declare const Toggles: Toggles;
+declare const Options: Options;
 
 /************************************************************
  * INITIALIZATION

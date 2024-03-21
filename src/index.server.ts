@@ -33,12 +33,14 @@ const {
 	Tabbox,
 	Tab,
 	DependencyBox,
+	Label,
 	Toggle,
 	Slider,
 	Dropdown,
 	MultiDropdown,
 	Divider,
 	KeyPicker,
+	ColorPicker,
 } = loadstring(game.HttpGet(repo + "init.lua"))() as typeof Linoria;
 const library = loadstring(game.HttpGet(repo + "library.lua"))() as Library;
 const savemanager = loadstring(game.HttpGet(repo + "addons/savemanager.lua"))();
@@ -155,32 +157,25 @@ new Builder()
 					.title("Gameplay")
 					.left([
 						new Groupbox().title("Auto Parry").elements([
-							new Toggle()
-								.index("gameplay.auto_parry.enabled")
+							new Toggle("gameplay.auto_parry.enabled")
 								.title("Enabled")
 								.tooltip("Automatically parry attacks")
 								.default(false)
 								.extensions([
-									new KeyPicker()
-										.index("gameplay.auto_parry.key")
-										.title("Auto Parry")
-										.bind("V")
-										.mode("Hold"),
+									new KeyPicker("gameplay.auto_parry.key").title("Auto Parry").bind("V").mode("Hold"),
 								]),
 
 							new DependencyBox()
 								.dependsOn("gameplay.auto_parry.enabled", true)
 								.elements([
-									new Toggle()
-										.index("gameplay.auto_parry.predict_enabled")
+									new Toggle("gameplay.auto_parry.predict_enabled")
 										.title("Predict")
 										.tooltip("Predicts the enemy's velocity, so you can parry in advance.")
 										.default(false),
 									new DependencyBox()
 										.dependsOn("gameplay.auto_parry.predict_enabled", true)
 										.elements([
-											new Slider()
-												.index("gameplay.auto_parry.predict_time")
+											new Slider("gameplay.auto_parry.predict_time")
 												.title("Amount")
 												.suffix(" ms")
 												.round(0)
@@ -189,8 +184,7 @@ new Builder()
 												.compact(true)
 												.hideMax(true),
 										]),
-									new Toggle()
-										.index("gameplay.auto_parry.debug")
+									new Toggle("gameplay.auto_parry.debug")
 										.title("Debugger")
 										.tooltip("Enable debug notifications for Auto Parry")
 										.default(true),
@@ -201,17 +195,52 @@ new Builder()
 				new Page()
 					.title("Target")
 					.left([
+						new Groupbox().title("Selection").elements([
+							new Toggle("target.selection.fov_visible")
+								.title("Show Circle")
+								.tooltip("Shows the circle of the FOV")
+								.default(false),
+							new DependencyBox().dependsOn("target.selection.fov_visible", true).elements([
+								new Label().text("Circle Color").extensions([
+									new ColorPicker("target.selection.fov_color")
+										.title("FOV Color")
+										.default(new Color3(1, 1, 1))
+										.transparency(0),
+								]),
+							]),
+							new Slider("target.selection.fov_radius")
+								.title("FOV Radius")
+								.round(0)
+								.limits(10, 500)
+								.default(100)
+								.compact(true)
+								.hideMax(true)
+								.suffix("px"),
+
+							new MultiDropdown<"Enemies" | "Alive" | "In Radius" | "Visible" | "Not Obstructed">()
+								.index("target.selection.filters")
+								.title("Filters")
+								.tooltip("Only targets that meet these conditions will be considered")
+								.options(["Enemies", "Alive", "In Radius", "Visible", "Not Obstructed"])
+								.default(["Enemies", "Alive", "In Radius"]),
+							new Dropdown<"Closest to Cursor" | "Closest to Player" | "Lowest HP" | "Highest HP">()
+								.index("target.selection.mode")
+								.title("Priority")
+								.tooltip("Prioritizes certain targets over others")
+								.options(["Closest to Cursor", "Closest to Player", "Lowest HP", "Highest HP"])
+								.default("Closest to Player"),
+						]),
+					])
+					.right([
 						new Groupbox()
 							.title("Filters")
 							.elements([
-								new MultiDropdown()
-									.index("target.filter.players")
+								new MultiDropdown("target.filter.players")
 									.title("Players")
 									.tooltip("The list of players to whitelist/blacklist")
 									.canNull(true)
 									.specialType("Player"),
-								new Dropdown<"Ally" | "Enemy">()
-									.index("target.filter.players_type")
+								new Dropdown<"Ally" | "Enemy">("target.filter.players_type")
 									.title("Player disposition")
 									.tooltip("Sets the selected players as allies or enemies")
 									.options(["Ally", "Enemy"])
@@ -219,36 +248,32 @@ new Builder()
 
 								new Divider(),
 
-								new Toggle()
-									.index("target.filter.team_filter")
-									.title("Team filter?")
+								new Toggle("target.filter.team_filter")
+									.title("Filter teams?")
 									.tooltip("Enables team checking for the filter")
 									.default(false),
 								new DependencyBox()
 									.dependsOn("target.filter.team_filter", true)
 									.elements([
-										new MultiDropdown()
-											.index("target.filter.teams")
+										new MultiDropdown("target.filter.teams")
 											.title("Teams")
 											.tooltip("The list of teams to whitelist/blacklist")
 											.canNull(true)
 											.specialType("Team"),
-										new Dropdown<"Ally" | "Enemy">()
-											.index("target.filter.teams_type")
+										new Dropdown<"Ally" | "Enemy">("target.filter.teams_type")
 											.title("Team disposition")
 											.tooltip("Sets the selected teams as allies or enemies")
 											.options(["Ally", "Enemy"])
 											.default("Enemy"),
 
-										new Dropdown<"All" | "Any">()
-											.index("target.filter.teams_mode")
-											.title("Mode")
-											.options(["All", "Any"])
-											.default("All"),
+										new Dropdown<"Resolve as Ally" | "Resolve as Enemy">("target.filter.resolve")
+											.title("Resolution Mode")
+											.tooltip("Sets how the filter will resolve conflicts in disposition.")
+											.options(["Resolve as Ally", "Resolve as Enemy"])
+											.default("Resolve as Ally"),
 									]),
 							]),
-					])
-					.right([]),
+					]),
 				new Page().title("Settings").left([]).right([]),
 			]),
 	])

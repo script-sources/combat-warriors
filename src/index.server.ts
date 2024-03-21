@@ -39,6 +39,7 @@ const {
 	Dropdown,
 	MultiDropdown,
 	Divider,
+	Spacer,
 	KeyPicker,
 	ColorPicker,
 } = loadstring(game.HttpGet(repo + "init.lua"))() as typeof Linoria;
@@ -195,58 +196,47 @@ new Builder()
 				new Page()
 					.title("Target")
 					.left([
-						new Groupbox().title("Selection").elements([
-							new Toggle("target.selection.fov_visible")
-								.title("Show Circle")
-								.tooltip("Shows the circle of the FOV")
-								.default(false),
-							new DependencyBox().dependsOn("target.selection.fov_visible", true).elements([
-								new Label().text("Circle Color").extensions([
-									new ColorPicker("target.selection.fov_color")
-										.title("FOV Color")
-										.default(new Color3(1, 1, 1))
-										.transparency(0),
-								]),
+						new Groupbox()
+							.title("Selection")
+							.elements([
+								new MultiDropdown<"Enemies" | "Alive" | "In Radius" | "Visible" | "Not Obstructed">()
+									.index("target.selection.filters")
+									.title("Filters")
+									.tooltip("Only targets that meet these conditions will be considered")
+									.options(["Enemies", "Alive", "In Radius", "Visible", "Not Obstructed"])
+									.default(["Enemies", "Alive", "In Radius"]),
+								new Dropdown<"Closest to Cursor" | "Closest to Player" | "Lowest HP" | "Highest HP">()
+									.index("target.selection.mode")
+									.title("Priority")
+									.tooltip("Prioritizes certain targets over others")
+									.options(["Closest to Cursor", "Closest to Player", "Lowest HP", "Highest HP"])
+									.default("Closest to Player"),
+								new Slider("target.selection.fov_radius")
+									.title("FOV Radius")
+									.round(0)
+									.limits(10, 500)
+									.default(100)
+									.compact(true)
+									.hideMax(true)
+									.suffix("px"),
 							]),
-							new Slider("target.selection.fov_radius")
-								.title("FOV Radius")
-								.round(0)
-								.limits(10, 500)
-								.default(100)
-								.compact(true)
-								.hideMax(true)
-								.suffix("px"),
-
-							new MultiDropdown<"Enemies" | "Alive" | "In Radius" | "Visible" | "Not Obstructed">()
-								.index("target.selection.filters")
-								.title("Filters")
-								.tooltip("Only targets that meet these conditions will be considered")
-								.options(["Enemies", "Alive", "In Radius", "Visible", "Not Obstructed"])
-								.default(["Enemies", "Alive", "In Radius"]),
-							new Dropdown<"Closest to Cursor" | "Closest to Player" | "Lowest HP" | "Highest HP">()
-								.index("target.selection.mode")
-								.title("Priority")
-								.tooltip("Prioritizes certain targets over others")
-								.options(["Closest to Cursor", "Closest to Player", "Lowest HP", "Highest HP"])
-								.default("Closest to Player"),
-						]),
 					])
 					.right([
 						new Groupbox()
 							.title("Filters")
 							.elements([
 								new MultiDropdown("target.filter.players")
-									.title("Players")
+									.title("Player List")
 									.tooltip("The list of players to whitelist/blacklist")
 									.canNull(true)
 									.specialType("Player"),
 								new Dropdown<"Ally" | "Enemy">("target.filter.players_type")
-									.title("Player disposition")
+									.title("Disposition")
 									.tooltip("Sets the selected players as allies or enemies")
 									.options(["Ally", "Enemy"])
 									.default("Enemy"),
 
-								new Divider(),
+								new Spacer(8),
 
 								new Toggle("target.filter.team_filter")
 									.title("Filter teams?")
@@ -256,18 +246,17 @@ new Builder()
 									.dependsOn("target.filter.team_filter", true)
 									.elements([
 										new MultiDropdown("target.filter.teams")
-											.title("Teams")
+											.title("Team List")
 											.tooltip("The list of teams to whitelist/blacklist")
 											.canNull(true)
 											.specialType("Team"),
 										new Dropdown<"Ally" | "Enemy">("target.filter.teams_type")
-											.title("Team disposition")
+											.title("Disposition")
 											.tooltip("Sets the selected teams as allies or enemies")
 											.options(["Ally", "Enemy"])
 											.default("Enemy"),
-
 										new Dropdown<"Resolve as Ally" | "Resolve as Enemy">("target.filter.resolve")
-											.title("Resolution Mode")
+											.title("Resolve Method")
 											.tooltip("Sets how the filter will resolve conflicts in disposition.")
 											.options(["Resolve as Ally", "Resolve as Enemy"])
 											.default("Resolve as Ally"),

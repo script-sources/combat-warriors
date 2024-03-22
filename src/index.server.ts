@@ -201,12 +201,14 @@ class CharacterComponent extends HumanoidComponent {
 	protected tools: Set<Tool>;
 	protected equipped: Tool | undefined;
 	protected backpack: Backpack;
+	protected parries: Set<number>;
 
 	constructor(player: Player, instance: Model) {
 		super(instance);
 
 		const id = player.Name + " @" + player.DisplayName;
 		const tools = new Set<Tool>();
+		const parries = new Set<number>();
 		const backpack = player.WaitForChild("Backpack") as Backpack | undefined;
 		if (!backpack) throw `[CharacterComponent]: '${id}' does not have a Backpack`;
 
@@ -216,6 +218,7 @@ class CharacterComponent extends HumanoidComponent {
 		this.tools = tools;
 		this.equipped = undefined;
 		this.backpack = backpack;
+		this.parries = parries;
 
 		const { bin } = this;
 		bin.add(backpack.ChildAdded.Connect((child) => this._onBackpackChild(child)));
@@ -240,6 +243,21 @@ class CharacterComponent extends HumanoidComponent {
 	 * Called when a tool is equipped.
 	 */
 	protected onEquip() {}
+
+	/**
+	 * Called when the character swings a melee weapon.
+	 */
+	protected onSwing() {}
+
+	/**
+	 * Called when the character parries.
+	 */
+	protected onParry() {
+		const { parries } = this;
+		const t = os.clock();
+		parries.add(t);
+		task.delay(0.4, () => parries.delete(t));
+	}
 
 	/**
 	 * Handles the addition of a tool to the character's backpack.
@@ -278,10 +296,6 @@ class EntityComponent extends CharacterComponent {
 	constructor(player: Player, instance: Model) {
 		super(player, instance);
 	}
-
-	protected onTool(tool: Tool): void {
-		super.onTool(tool);
-	}
 }
 
 class PlayerComponent extends BaseComponent<Player> {
@@ -293,7 +307,7 @@ class PlayerComponent extends BaseComponent<Player> {
 		this.id = player.Name + " @" + player.DisplayName;
 
 		const char = player.Character;
-		if (char) this.onCharacter(char);
+		if (char) task.defer(() => this.onCharacter(char));
 
 		const { bin } = this;
 		bin.batch(

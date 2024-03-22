@@ -232,6 +232,7 @@ do
 		super.constructor(self, instance)
 		local id = player.Name .. " @" .. player.DisplayName
 		local tools = {}
+		local parries = {}
 		local backpack = player:WaitForChild("Backpack")
 		if not backpack then
 			error(`[CharacterComponent]: '{id}' does not have a Backpack`)
@@ -241,6 +242,7 @@ do
 		self.tools = tools
 		self.equipped = nil
 		self.backpack = backpack
+		self.parries = parries
 		local _binding_1 = self
 		local bin = _binding_1.bin
 		bin:add(backpack.ChildAdded:Connect(function(child)
@@ -254,6 +256,21 @@ do
 	function CharacterComponent:onRanged(tool)
 	end
 	function CharacterComponent:onEquip()
+	end
+	function CharacterComponent:onSwing()
+	end
+	function CharacterComponent:onParry()
+		local _binding_1 = self
+		local parries = _binding_1.parries
+		local t = os.clock()
+		parries[t] = true
+		task.delay(0.4, function()
+			-- ▼ Set.delete ▼
+			local _valueExisted = parries[t] ~= nil
+			parries[t] = nil
+			-- ▲ Set.delete ▲
+			return _valueExisted
+		end)
 	end
 	function CharacterComponent:_onBackpackChild(tool)
 		if not tool:IsA("Tool") then
@@ -309,9 +326,6 @@ do
 	function EntityComponent:constructor(player, instance)
 		super.constructor(self, player, instance)
 	end
-	function EntityComponent:onTool(tool)
-		super.onTool(self, tool)
-	end
 end
 local PlayerComponent
 do
@@ -332,7 +346,9 @@ do
 		self.id = player.Name .. " @" .. player.DisplayName
 		local char = player.Character
 		if char then
-			self:onCharacter(char)
+			task.defer(function()
+				return self:onCharacter(char)
+			end)
 		end
 		local _binding_1 = self
 		local bin = _binding_1.bin

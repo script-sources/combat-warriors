@@ -1,7 +1,7 @@
-import { Players } from "@rbxts/services";
+import { Players, ReplicatedStorage } from "@rbxts/services";
 import type * as Linoria from "@script-ts/linorialib";
 import { Library } from "@script-ts/linorialib/out/library";
-import { Destructible, Node } from "types";
+import { Destructible, MeleeData, Node, RangeData } from "types";
 
 if (_G["combat-warriors"]) throw "This program is already running!";
 else _G["combat-warriors"] = true;
@@ -11,6 +11,8 @@ else _G["combat-warriors"] = true;
  * Description: User-defined settings and configurations
  * Last updated: Feb. 14, 2024
  ************************************************************/
+const MeleeData = new Map<string, MeleeData>([["Bo Staff", { range: 14, duration: 0.25 }]]);
+const RangeData = new Map<string, RangeData>([["Crossbow", { speed: 100, gravity: 0.5 }]]);
 
 /************************************************************
  * VARIABLES
@@ -116,6 +118,41 @@ class Bin {
 	}
 }
 
+declare const debug: ExecutorDebug;
+const req = (() => {
+	const Nevermore = require(ReplicatedStorage.WaitForChild("Framework").WaitForChild("Nevermore") as ModuleScript);
+	const _require = rawget(Nevermore, "_require") as (...args: unknown[]) => unknown;
+	const modules = debug.getupvalue(_require, 2) as Map<string, unknown>;
+	assert(type(modules) === "table");
+	assert(getmetatable(modules) !== undefined);
+
+	return <T>(moduleName: string): T => {
+		let module: ModuleScript | undefined;
+		while (module === undefined) {
+			const object = modules.get(moduleName);
+			if (typeIs(object, "Instance") && object.IsA("ModuleScript")) module = object;
+			task.wait();
+		}
+		setthreadidentity(2);
+		const result = getrenv().require(module);
+		setthreadidentity(7);
+		return result as T;
+	};
+})();
+
+interface StaminaHandler {
+	getDefaultStamina(): {
+		getMaxStamina(): number;
+		setStamina(value: number): void;
+	};
+}
+interface WeaponMetadata {
+	[key: string]: unknown;
+}
+
+const StaminaHandler = req<StaminaHandler>("DefaultStaminaHandlerClient");
+const WeaponMetadata = req<WeaponMetadata>("WeaponMetadata");
+
 /************************************************************
  * COMPONENTS
  * Description: Classes for specific entities/objects
@@ -134,11 +171,158 @@ class BaseComponent<T extends Instance> {
 	}
 }
 
+class HumanoidComponent extends BaseComponent<Model> {
+	public readonly root: BasePart;
+	public readonly humanoid: Humanoid;
+
+	constructor(instance: Model) {
+		super(instance);
+		const name = instance.Name;
+		const root = instance.WaitForChild("HumanoidRootPart") as BasePart | undefined;
+		if (!root) throw `[HumanoidComponent]: '${name}' does not have a HumanoidRootPart`;
+		const humanoid = instance.WaitForChild("Humanoid") as Humanoid | undefined;
+		if (!humanoid) throw `[HumanoidComponent]: '${name}' does not have a Humanoid`;
+
+		this.root = root;
+		this.humanoid = humanoid;
+
+		const { bin } = this;
+		bin.batch(
+			humanoid.Died.Connect(() => this.destroy()),
+			instance.AncestryChanged.Connect((_, parent) => parent === undefined && this.destroy()),
+		);
+	}
+}
+
+class CharacterComponent extends HumanoidComponent {
+	public readonly id: string;
+	public readonly player: Player;
+
+	protected tools: Set<Tool>;
+	protected equipped: Tool | undefined;
+	protected backpack: Backpack;
+
+	constructor(player: Player, instance: Model) {
+		super(instance);
+
+		const id = player.Name + " @" + player.DisplayName;
+		const tools = new Set<Tool>();
+		const backpack = player.WaitForChild("Backpack") as Backpack | undefined;
+		if (!backpack) throw `[CharacterComponent]: '${id}' does not have a Backpack`;
+
+		this.id = id;
+		this.player = player;
+
+		this.tools = tools;
+		this.equipped = undefined;
+		this.backpack = backpack;
+
+		const { bin } = this;
+		bin.add(backpack.ChildAdded.Connect((child) => this._onBackpackChild(child)));
+	}
+
+	/**
+	 * Called when a tool is added to the character's backpack.
+	 */
+	protected onTool(tool: Tool) {}
+
+	/**
+	 * Called when a Melee is added to the character's backpack.
+	 */
+	protected onMelee(tool: Tool) {}
+
+	/**
+	 * Called when a Ranged is added to the character's backpack.
+	 */
+	protected onRanged(tool: Tool) {}
+
+	/**
+	 * Called when a tool is equipped.
+	 */
+	protected onEquip() {}
+
+	/**
+	 * Handles the addition of a tool to the character's backpack.
+	 */
+	private _onBackpackChild(tool: Instance): void {
+		if (!tool.IsA("Tool")) return;
+
+		const tools = this.tools;
+		if (tools.has(tool)) return;
+		tools.add(tool);
+
+		const id = tool.GetAttribute("ItemId");
+		print(id);
+		task.defer(() => this.onTool(tool));
+
+		const { backpack, bin, instance } = this;
+		let previous: Instance | undefined = backpack;
+		bin.add(
+			tool.AncestryChanged.Connect(() => {
+				const parent = tool.Parent;
+				if (parent !== previous) {
+					if (parent === backpack) {
+						if (this.equipped === tool) this.equipped = undefined;
+					} else if (parent === instance) {
+						this.equipped = tool;
+					}
+					previous = parent;
+					this.onEquip();
+				}
+			}),
+		);
+	}
+}
+
+class EntityComponent extends CharacterComponent {
+	constructor(player: Player, instance: Model) {
+		super(player, instance);
+	}
+
+	protected onTool(tool: Tool): void {
+		super.onTool(tool);
+	}
+}
+
+class PlayerComponent extends BaseComponent<Player> {
+	public readonly id: string;
+	public character?: EntityComponent;
+
+	constructor(player: Player) {
+		super(player);
+		this.id = player.Name + " @" + player.DisplayName;
+
+		const char = player.Character;
+		if (char) this.onCharacter(char);
+
+		const { bin } = this;
+		bin.batch(
+			player.CharacterAdded.Connect((character) => this.onCharacter(character)),
+			player.CharacterRemoving.Connect(() => this.character?.destroy()),
+			Players.PlayerRemoving.Connect((plr) => plr === player && this.destroy()),
+		);
+	}
+
+	protected onCharacter(character: Model) {
+		this.character = new EntityComponent(this.instance, character);
+	}
+}
+
 /************************************************************
  * CONTROLLERS
  * Description: Singletons that are used once
  * Last updated: Feb. 14, 2024
  ************************************************************/
+
+namespace PlayerController {
+	const onPlayer = (player: Player) => new PlayerComponent(player);
+
+	export function __init() {
+		// for (const player of Players.GetPlayers()) onPlayer(player);
+		// Players.PlayerAdded.Connect(onPlayer);
+		new PlayerComponent(LocalPlayer);
+	}
+}
 
 /************************************************************
  * INTERFACE
@@ -191,46 +375,89 @@ new Builder()
 										.default(true),
 								]),
 						]),
+						new Groupbox()
+							.title("Movement Modifications")
+							.elements([
+								new Toggle("gameplay.movement.infinite_stamina")
+									.title("Infinite Stamina")
+									.tooltip("Disables stamina consumption")
+									.default(false),
+								new Toggle("gameplay.movement.roll_animation")
+									.title("Roll Cancel")
+									.tooltip("Presses Q when rolling to override the animation")
+									.default(true),
+							]),
 					])
-					.right([]),
+					.right([
+						new Groupbox()
+							.title("Ranged Aim")
+							.elements([
+								new Dropdown<"Head" | "Torso">("gameplay.ranged.target")
+									.title("Target")
+									.tooltip("The part of the body to aim at")
+									.options(["Head", "Torso"])
+									.default("Head"),
+								new Toggle("gameplay.ranged.silent")
+									.title("Silent")
+									.tooltip("Shoots at the target without aiming")
+									.default(false),
+								new Toggle("gameplay.ranged.aimbot")
+									.title("Aimbot")
+									.tooltip("Moves mouse towards the target")
+									.default(false),
+								new DependencyBox()
+									.dependsOn("gameplay.ranged.aimbot", true)
+									.elements([
+										new Slider("gameplay.ranged.aimbot.sensitivity")
+											.title("Sensitivity")
+											.suffix("%")
+											.round(0)
+											.limits(1, 100)
+											.default(50)
+											.compact(true)
+											.hideMax(true),
+									]),
+							]),
+					]),
 				new Page()
-					.title("Target")
+					.title("Targeting")
 					.left([
 						new Groupbox()
-							.title("Selection")
+							.title("Selector")
 							.elements([
-								new MultiDropdown<"Enemies" | "Alive" | "In Radius" | "Visible" | "Not Obstructed">()
-									.index("target.selection.filters")
+								new MultiDropdown<"Enemies" | "Alive" | "In Radius" | "Visible" | "Not Obstructed">(
+									"targeting.selector.filters",
+								)
 									.title("Filters")
 									.tooltip("Only targets that meet these conditions will be considered")
 									.options(["Enemies", "Alive", "In Radius", "Visible", "Not Obstructed"])
 									.default(["Enemies", "Alive", "In Radius"]),
-								new Dropdown<"Closest to Cursor" | "Closest to Player" | "Lowest HP" | "Highest HP">()
-									.index("target.selection.mode")
+								new Dropdown<"Closest to Cursor" | "Closest to Player" | "Lowest HP" | "Highest HP">(
+									"targeting.selector.mode",
+								)
 									.title("Priority")
 									.tooltip("Prioritizes certain targets over others")
 									.options(["Closest to Cursor", "Closest to Player", "Lowest HP", "Highest HP"])
 									.default("Closest to Player"),
-								new Slider("target.selection.fov_radius")
+								new Slider("targeting.selector.fov_radius")
 									.title("FOV Radius")
 									.round(0)
 									.limits(10, 500)
 									.default(100)
-									.compact(true)
 									.hideMax(true)
 									.suffix("px"),
 							]),
 					])
 					.right([
 						new Groupbox()
-							.title("Filters")
+							.title("Designate")
 							.elements([
-								new MultiDropdown("target.filter.players")
+								new MultiDropdown("targeting.designate.players")
 									.title("Player List")
 									.tooltip("The list of players to whitelist/blacklist")
 									.canNull(true)
 									.specialType("Player"),
-								new Dropdown<"Ally" | "Enemy">("target.filter.players_type")
+								new Dropdown<"Ally" | "Enemy">("targeting.designate.players_type")
 									.title("Disposition")
 									.tooltip("Sets the selected players as allies or enemies")
 									.options(["Ally", "Enemy"])
@@ -238,24 +465,26 @@ new Builder()
 
 								new Spacer(8),
 
-								new Toggle("target.filter.team_filter")
+								new Toggle("targeting.designate.team_filter")
 									.title("Filter teams?")
 									.tooltip("Enables team checking for the filter")
 									.default(false),
 								new DependencyBox()
-									.dependsOn("target.filter.team_filter", true)
+									.dependsOn("targeting.designate.team_filter", true)
 									.elements([
-										new MultiDropdown("target.filter.teams")
+										new MultiDropdown("targeting.designate.teams")
 											.title("Team List")
 											.tooltip("The list of teams to whitelist/blacklist")
 											.canNull(true)
 											.specialType("Team"),
-										new Dropdown<"Ally" | "Enemy">("target.filter.teams_type")
+										new Dropdown<"Ally" | "Enemy">("targeting.designate.teams_type")
 											.title("Disposition")
 											.tooltip("Sets the selected teams as allies or enemies")
 											.options(["Ally", "Enemy"])
 											.default("Enemy"),
-										new Dropdown<"Resolve as Ally" | "Resolve as Enemy">("target.filter.resolve")
+										new Dropdown<"Resolve as Ally" | "Resolve as Enemy">(
+											"targeting.designate.resolve",
+										)
 											.title("Resolve Method")
 											.tooltip("Sets how the filter will resolve conflicts in disposition.")
 											.options(["Resolve as Ally", "Resolve as Enemy"])
@@ -279,5 +508,6 @@ declare const Options: Options;
  * Description: Initializes and starts the runtime
  * Last updated: Feb. 14, 2024
  ************************************************************/
+PlayerController.__init();
 
 export = "Initialized Successfully";

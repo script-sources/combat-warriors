@@ -1,5 +1,10 @@
-export type MeleeData = { range: number; duration: number };
-export type RangeData = { speed: number; gravity: number };
+export type MeleeData = {
+	name: string;
+	range: number;
+	duration: number;
+	cooldown: number;
+};
+export type RangeData = { name: string; speed: number; gravity: number };
 
 declare global {
 	interface _G {

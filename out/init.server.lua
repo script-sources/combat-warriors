@@ -1047,6 +1047,22 @@ do
 			-- ▲ Map.delete ▲
 			return _valueExisted
 		end, function()
+			local _allies = EntityComponent.allies
+			local _instance_1 = instance
+			-- ▼ Map.delete ▼
+			local _valueExisted = _allies[_instance_1] ~= nil
+			_allies[_instance_1] = nil
+			-- ▲ Map.delete ▲
+			return _valueExisted
+		end, function()
+			local _enemies = EntityComponent.enemies
+			local _instance_1 = instance
+			-- ▼ Map.delete ▼
+			local _valueExisted = _enemies[_instance_1] ~= nil
+			_enemies[_instance_1] = nil
+			-- ▲ Map.delete ▲
+			return _valueExisted
+		end, function()
 			return self.quad:Remove()
 		end)
 	end
@@ -1528,24 +1544,6 @@ do
 		end
 		-- ▲ ReadonlyMap.forEach ▲
 	end
-	local function isTargetValid(component)
-		if filters.Enemies ~= nil and component:getDisposition() == Disposition.Ally then
-			return false
-		end
-		local viewportPoint = Camera:WorldToViewportPoint(component.root.Position)
-		if viewportPoint.Z < 0 then
-			return false
-		end
-		if filters["In Radius"] ~= nil then
-			local mousePosition = UserInputService:GetMouseLocation()
-			local distance = (Vector2.new(viewportPoint.X, viewportPoint.Y) - mousePosition).Magnitude
-			if distance > radius then
-				return false
-			end
-		end
-		return true
-	end
-	_container.isTargetValid = isTargetValid
 	local function getTarget()
 		local list = if filters.Enemies ~= nil then EntityComponent.enemies else EntityComponent.instances
 		local filterRadius = filters["In Radius"] ~= nil
@@ -1556,8 +1554,6 @@ do
 		local weight = -math.huge
 		-- ▼ ReadonlyMap.forEach ▼
 		local _callback = function(component)
-			local aInstance = AgentController.instance
-			local instance = component.instance
 			local position = component.root.Position
 			local aPos = AgentController.getPosition()
 			local viewportPoint = Camera:WorldToViewportPoint(position)
@@ -1567,14 +1563,14 @@ do
 			end
 			-- Filter: Visible to Camera
 			if filterVisible then
-				local parts = Camera:GetPartsObscuringTarget({ position }, { aInstance, instance })
-				if #parts > 0 then
+				local origin = Camera.CFrame.Position
+				local result = Workspace:Raycast(origin, position - origin, rayParams)
+				if result then
 					return nil
 				end
 			end
 			-- Filter: Obstructed from Agent
 			if filterObstructed then
-				rayParams.FilterDescendantsInstances = { aInstance, instance }
 				local result = Workspace:Raycast(aPos, position - aPos, rayParams)
 				if result then
 					return nil
@@ -1598,7 +1594,6 @@ do
 					return nil
 				end
 			elseif mode == "Closest to Player" then
-				local aPos = AgentController.getPosition()
 				local distance = (position - aPos).Magnitude
 				local prio = 1e5 - distance
 				if prio > weight then
@@ -1652,7 +1647,8 @@ do
 		Options["targeting.designate.teams_type"]:OnChanged(updateDispositions)
 		Options["targeting.designate.resolve"]:OnChanged(updateDispositions)
 		rayParams = RaycastParams.new()
-		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = { Workspace:WaitForChild("Map"), Workspace.Terrain }
+		rayParams.FilterType = Enum.RaycastFilterType.Include
 		rayParams.IgnoreWater = true
 	end
 	_container.__init = __init
@@ -1660,10 +1656,12 @@ end
 local RangedController = {}
 do
 	local _container = RangedController
+	local target
 	local part
 	local sensitivity
 	local need_target
 	local silent_enabled
+	local aimbot_enabled
 	local _keybind
 	local flat = Vector3.new(1, 0, 1)
 	local predict = function(target)
@@ -1695,36 +1693,25 @@ do
 		end
 		return Vector3.new()
 	end
-	local getTarget = function()
-		return TargetingController.getTarget()
-	end
+	local getTarget = TargetingController.getTarget
 	local onRender = function()
-		if _keybind:GetState() then
+		if need_target then
 			local target = getTarget()
 			if target then
-				local mousePosition = UserInputService:GetMouseLocation()
-				local viewportPoint = Camera:WorldToViewportPoint(predict(target))
-				mousemoverel((viewportPoint.X - mousePosition.X) * sensitivity, (viewportPoint.Y - mousePosition.Y) * sensitivity)
+				if aimbot_enabled and _keybind:GetState() then
+					local mousePosition = UserInputService:GetMouseLocation()
+					local viewportPoint = Camera:WorldToViewportPoint(predict(target))
+					mousemoverel((viewportPoint.X - mousePosition.X) * sensitivity, (viewportPoint.Y - mousePosition.Y) * sensitivity)
+				end
 			end
 		end
 	end
 	local function __init()
 		_keybind = Options["gameplay.ranged.keybind"]
-		local aimConnection
 		local aimbot = Toggles["gameplay.ranged.aimbot"]
 		local silent = Toggles["gameplay.ranged.silent"]
 		aimbot:OnChanged(function(value)
 			need_target = value or silent.Value
-			if value then
-				aimConnection = RunService.RenderStepped:Connect(function()
-					return onRender()
-				end)
-			else
-				local _result = aimConnection
-				if _result ~= nil then
-					_result:Disconnect()
-				end
-			end
 		end)
 		silent:OnChanged(function(value)
 			silent_enabled = value
@@ -1735,6 +1722,9 @@ do
 		end)
 		Options["gameplay.ranged.aimbot.sensitivity"]:OnChanged(function(value)
 			sensitivity = value / 100
+		end)
+		RunService.RenderStepped:Connect(function()
+			return onRender()
 		end)
 		local enabled = function()
 			return silent_enabled and _keybind:GetState()
@@ -1780,11 +1770,11 @@ do
 		Options["visuals.player_esp.ally_color"]:OnChanged(updateEntityVisuals)
 		Options["visuals.player_esp.enemy_color"]:OnChanged(updateEntityVisuals)
 		local _circle = false
-		Toggles["visuals.misc.circle"]:OnChanged(function(value)
+		Toggles["visuals.aimbot.circle"]:OnChanged(function(value)
 			circle.Visible = value
 			_circle = value
 		end)
-		local _color = Options["visuals.misc.circle_color"]
+		local _color = Options["visuals.aimbot.circle_color"]
 		_color:OnChanged(function()
 			circle.Color = _color.Value
 			circle.Transparency = 1 - _color.Transparency
@@ -1818,7 +1808,7 @@ end
 	 * Last updated: Mar. 22, 2024
 	 ***********************************************************
 ]]
-Builder.new():root("muffet_hub", "combat_warriors"):library(library):withSaveManager(savemanager):withThemeManager(thememanager):windows({ Window.new():title("Muffet Hub | Combat Warriors"):centered(true):autoShow(true):withFadeTime(0):pages({ Page.new():title("Gameplay"):left({ Groupbox.new():title("Auto Parry"):elements({ Toggle.new("gameplay.auto_parry.enabled"):title("Enabled"):tooltip("Automatically parry attacks"):default(false):extensions({ KeyPicker.new("gameplay.auto_parry.key"):title("Auto Parry"):bind("V"):mode("Hold") }), DependencyBox.new():dependsOn("gameplay.auto_parry.enabled", true):elements({ Slider.new("gameplay.auto_parry.threshold"):title("Distance Threshold"):suffix(" studs"):round(0):limits(0, 50):default(1):hideMax(true), Toggle.new("gameplay.auto_parry.debug"):title("Debugger"):tooltip("Enable debug notifications for Auto Parry"):default(true) }) }), Groupbox.new():title("Hitbox Modifications"):elements({ Toggle.new("gameplay.hitbox.anti_parry"):title("Anti-Parry"):tooltip("Hitbox ignores parries"):default(false), Toggle.new("gameplay.hitbox.ignore_allies"):title("Ignore Allies"):tooltip("Hitbox ignores allies"):default(false) }), Groupbox.new():title("Movement Modifications"):elements({ Toggle.new("gameplay.movement.infinite_stamina"):title("Infinite Stamina"):tooltip("Disables stamina consumption"):default(false), Toggle.new("gameplay.movement.roll_animation"):title("Roll Cancel"):tooltip("Presses Q when rolling to override the animation"):default(true) }) }):right({ Groupbox.new():title("Ranged Aim"):elements({ Dropdown.new("gameplay.ranged.target"):title("Target"):tooltip("The part of the body to aim at"):options({ "Head", "Torso" }):default("Head"), Toggle.new("gameplay.ranged.silent"):title("Silent"):tooltip("Shoots at the target without aiming"):default(false), Toggle.new("gameplay.ranged.aimbot"):title("Aimbot"):tooltip("Moves mouse towards the target"):default(false):extensions({ KeyPicker.new("gameplay.ranged.keybind"):title("Aimbot"):bind("MB2"):mode("Hold") }), DependencyBox.new():dependsOn("gameplay.ranged.aimbot", true):elements({ Slider.new("gameplay.ranged.aimbot.sensitivity"):title("Sensitivity"):suffix("%"):round(0):limits(1, 100):default(50):compact(true):hideMax(true) }) }) }), Page.new():title("Targeting"):left({ Groupbox.new():title("Selector"):elements({ MultiDropdown.new("targeting.selector.filters"):title("Filters"):tooltip("Only targets that meet these conditions will be considered"):options({ "Enemies", "In Radius", "Visible", "Not Obstructed" }):default({ "Enemies", "In Radius" }), Dropdown.new("targeting.selector.mode"):title("Priority"):tooltip("Prioritizes certain targets over others"):options({ "Closest to Cursor", "Closest to Player", "Lowest HP", "Highest HP" }):default("Closest to Player"), Slider.new("targeting.selector.fov_radius"):title("FOV Radius"):round(0):limits(10, 500):default(100):hideMax(true):suffix("px") }) }):right({ Groupbox.new():title("Designate"):elements({ MultiDropdown.new("targeting.designate.players"):title("Player List"):tooltip("The list of players to whitelist/blacklist"):canNull(true):specialType("Player"), Dropdown.new("targeting.designate.players_type"):title("Disposition"):tooltip("Sets the selected players as allies or enemies"):options({ "Ally", "Enemy" }):default("Ally"), Spacer.new(8), Toggle.new("targeting.designate.team_filter"):title("Filter teams?"):tooltip("Enables team checking for the filter"):default(false), DependencyBox.new():dependsOn("targeting.designate.team_filter", true):elements({ MultiDropdown.new("targeting.designate.teams"):title("Team List"):tooltip("The list of teams to whitelist/blacklist"):canNull(true):specialType("Team"), Toggle.new("targeting.designate.include_neutral"):title("Include Neutral"):tooltip("Includes neutral teams in the list"):default(false), Dropdown.new("targeting.designate.teams_type"):title("Disposition"):tooltip("Sets the selected teams as allies or enemies"):options({ "Ally", "Enemy" }):default("Ally"), Dropdown.new("targeting.designate.resolve"):title("Resolve Method"):tooltip("Sets how the filter will resolve conflicts in disposition."):options({ "Resolve as Ally", "Resolve as Enemy" }):default("Resolve as Ally") }) }) }), Page.new():title("Visuals"):left({ Groupbox.new():title("Player ESP"):elements({ Toggle.new("visuals.player_esp.enabled"):title("Enabled"):tooltip("Draws ESP on players"):default(true), DependencyBox.new():dependsOn("visuals.player_esp.enabled", true):elements({ Toggle.new("visuals.player_esp.ally_enabled"):title("Ally ESP"):tooltip("Draws ESP on allies"):default(true):extensions({ ColorPicker.new("visuals.player_esp.ally_color"):title("Ally Color"):transparency(0):default(Color3.fromRGB(0, 255, 0)) }), Toggle.new("visuals.player_esp.enemy_enabled"):title("Enemy ESP"):tooltip("Draws ESP on enemies"):default(true):extensions({ ColorPicker.new("visuals.player_esp.enemy_color"):title("Enemy Color"):transparency(0):default(Color3.fromRGB(255, 0, 0)) }) }) }) }):right({ Groupbox.new():title("Miscellaneous"):elements({ Toggle.new("visuals.misc.circle"):title("Show FOV Circle"):tooltip("Draws a circle around the cursor"):default(true):extensions({ ColorPicker.new("visuals.misc.circle_color"):title("Circle Color"):transparency(0.5):default(Color3.fromRGB(255, 255, 255)) }) }) }), Page.new():title("Settings"):left({ ThemeSection.new() }):right({ ConfigSection.new() }) }) }):renderUI()
+Builder.new():root("muffet_hub", "combat_warriors"):library(library):withSaveManager(savemanager):withThemeManager(thememanager):windows({ Window.new():title("Muffet Hub | Combat Warriors"):centered(true):autoShow(true):withFadeTime(0):pages({ Page.new():title("Gameplay"):left({ Groupbox.new():title("Auto Parry"):elements({ Toggle.new("gameplay.auto_parry.enabled"):title("Enabled"):tooltip("Automatically parry attacks"):default(false):extensions({ KeyPicker.new("gameplay.auto_parry.key"):title("Auto Parry"):bind("V"):mode("Hold") }), DependencyBox.new():dependsOn("gameplay.auto_parry.enabled", true):elements({ Slider.new("gameplay.auto_parry.threshold"):title("Distance Threshold"):suffix(" studs"):round(0):limits(0, 50):default(1):hideMax(true), Toggle.new("gameplay.auto_parry.debug"):title("Debugger"):tooltip("Enable debug notifications for Auto Parry"):default(true) }) }), Groupbox.new():title("Hitbox Modifications"):elements({ Toggle.new("gameplay.hitbox.anti_parry"):title("Anti-Parry"):tooltip("Hitbox ignores parries"):default(false), Toggle.new("gameplay.hitbox.ignore_allies"):title("Ignore Allies"):tooltip("Hitbox ignores allies"):default(false) }), Groupbox.new():title("Movement Modifications"):elements({ Toggle.new("gameplay.movement.infinite_stamina"):title("Infinite Stamina"):tooltip("Disables stamina consumption"):default(false), Toggle.new("gameplay.movement.roll_animation"):title("Roll Cancel"):tooltip("Presses Q when rolling to override the animation"):default(true) }) }):right({ Groupbox.new():title("Ranged Aim"):elements({ Dropdown.new("gameplay.ranged.target"):title("Target"):tooltip("The part of the body to aim at"):options({ "Head", "Torso" }):default("Head"), Toggle.new("gameplay.ranged.silent"):title("Silent"):tooltip("Shoots at the target without aiming"):default(false), Toggle.new("gameplay.ranged.aimbot"):title("Aimbot"):tooltip("Moves mouse towards the target"):default(false):extensions({ KeyPicker.new("gameplay.ranged.keybind"):title("Aimbot"):bind("MB2"):mode("Hold") }), DependencyBox.new():dependsOn("gameplay.ranged.aimbot", true):elements({ Slider.new("gameplay.ranged.aimbot.sensitivity"):title("Sensitivity"):suffix("%"):round(0):limits(1, 100):default(50):compact(true):hideMax(true) }) }) }), Page.new():title("Targeting"):left({ Groupbox.new():title("Selector"):elements({ MultiDropdown.new("targeting.selector.filters"):title("Filters"):tooltip("Only targets that meet these conditions will be considered"):options({ "Enemies", "In Radius", "Visible", "Not Obstructed" }):default({ "Enemies", "In Radius" }), Dropdown.new("targeting.selector.mode"):title("Priority"):tooltip("Prioritizes certain targets over others"):options({ "Closest to Cursor", "Closest to Player", "Lowest HP", "Highest HP" }):default("Closest to Player"), Slider.new("targeting.selector.fov_radius"):title("FOV Radius"):round(0):limits(10, 500):default(100):hideMax(true):suffix("px") }) }):right({ Groupbox.new():title("Designate"):elements({ MultiDropdown.new("targeting.designate.players"):title("Player List"):tooltip("The list of players to whitelist/blacklist"):canNull(true):specialType("Player"), Dropdown.new("targeting.designate.players_type"):title("Disposition"):tooltip("Sets the selected players as allies or enemies"):options({ "Ally", "Enemy" }):default("Ally"), Spacer.new(8), Toggle.new("targeting.designate.team_filter"):title("Filter teams?"):tooltip("Enables team checking for the filter"):default(false), DependencyBox.new():dependsOn("targeting.designate.team_filter", true):elements({ MultiDropdown.new("targeting.designate.teams"):title("Team List"):tooltip("The list of teams to whitelist/blacklist"):canNull(true):specialType("Team"), Toggle.new("targeting.designate.include_neutral"):title("Include Neutral"):tooltip("Includes neutral teams in the list"):default(false), Dropdown.new("targeting.designate.teams_type"):title("Disposition"):tooltip("Sets the selected teams as allies or enemies"):options({ "Ally", "Enemy" }):default("Ally"), Dropdown.new("targeting.designate.resolve"):title("Resolve Method"):tooltip("Sets how the filter will resolve conflicts in disposition."):options({ "Resolve as Ally", "Resolve as Enemy" }):default("Resolve as Ally") }) }) }), Page.new():title("Visuals"):left({ Groupbox.new():title("Player ESP"):elements({ Toggle.new("visuals.player_esp.enabled"):title("Enabled"):tooltip("Draws ESP on players"):default(true), DependencyBox.new():dependsOn("visuals.player_esp.enabled", true):elements({ Toggle.new("visuals.player_esp.ally_enabled"):title("Ally ESP"):tooltip("Draws ESP on allies"):default(true):extensions({ ColorPicker.new("visuals.player_esp.ally_color"):title("Ally Color"):transparency(0):default(Color3.fromRGB(0, 255, 0)) }), Toggle.new("visuals.player_esp.enemy_enabled"):title("Enemy ESP"):tooltip("Draws ESP on enemies"):default(true):extensions({ ColorPicker.new("visuals.player_esp.enemy_color"):title("Enemy Color"):transparency(0):default(Color3.fromRGB(255, 0, 0)) }) }) }) }):right({ Groupbox.new():title("Aimbot"):elements({ Toggle.new("visuals.aimbot.circle"):title("Show FOV Circle"):tooltip("Draws a circle around the cursor"):default(true):extensions({ ColorPicker.new("visuals.aimbot.circle_color"):title("Circle Color"):transparency(0.5):default(Color3.fromRGB(255, 255, 255)) }), Toggle.new("visuals.aimbot.indicator"):title("Show Aimbot Indicator"):tooltip("Draws an indicator on the target"):default(true):extensions({ ColorPicker.new("visuals.aimbot.indicator_color"):title("Indicator Color"):transparency(0):default(Color3.fromRGB(255, 255, 255)) }) }) }), Page.new():title("Settings"):left({ ThemeSection.new() }):right({ ConfigSection.new() }) }) }):renderUI()
 --[[
 	***********************************************************
 	 * INITIALIZATION

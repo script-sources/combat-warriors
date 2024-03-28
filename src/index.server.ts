@@ -1009,6 +1009,8 @@ class EntityComponent extends CharacterComponent {
 		EntityComponent.instances.set(instance, this);
 		this.bin.batch(
 			() => EntityComponent.instances.delete(instance),
+			() => EntityComponent.allies.delete(instance),
+			() => EntityComponent.enemies.delete(instance),
 			() => this.quad.Remove(),
 		);
 	}
@@ -1376,20 +1378,6 @@ namespace TargetingController {
 		PlayerComponent.instances.forEach((component) => component.updateDisposition());
 	};
 
-	export function isTargetValid(component: EntityComponent) {
-		if (filters.has("Enemies") && component.getDisposition() === Disposition.Ally) return false;
-
-		const [viewportPoint] = Camera.WorldToViewportPoint(component.root.Position);
-		if (viewportPoint.Z < 0) return false;
-		if (filters.has("In Radius")) {
-			const mousePosition = UserInputService.GetMouseLocation();
-			const distance = new Vector2(viewportPoint.X, viewportPoint.Y).sub(mousePosition).Magnitude;
-			if (distance > radius) return false;
-		}
-
-		return true;
-	}
-
 	export function getTarget() {
 		const list = filters.has("Enemies") ? EntityComponent.enemies : EntityComponent.instances;
 
@@ -1402,8 +1390,6 @@ namespace TargetingController {
 		let best: EntityComponent | undefined;
 		let weight = -math.huge;
 		list.forEach((component) => {
-			const aInstance = AgentController.instance;
-			const instance = component.instance;
 			const position = component.root.Position;
 			const aPos = AgentController.getPosition();
 			const [viewportPoint] = Camera.WorldToViewportPoint(position);
@@ -1413,13 +1399,13 @@ namespace TargetingController {
 
 			// Filter: Visible to Camera
 			if (filterVisible) {
-				const parts = Camera.GetPartsObscuringTarget([position], [aInstance, instance]);
-				if (parts.size() > 0) return;
+				const origin = Camera.CFrame.Position;
+				const result = Workspace.Raycast(origin, position.sub(origin), rayParams);
+				if (result) return;
 			}
 
 			// Filter: Obstructed from Agent
 			if (filterObstructed) {
-				rayParams.FilterDescendantsInstances = [aInstance, instance];
 				const result = Workspace.Raycast(aPos, position.sub(aPos), rayParams);
 				if (result) return;
 			}
@@ -1440,7 +1426,6 @@ namespace TargetingController {
 					return;
 				}
 			} else if (mode === "Closest to Player") {
-				const aPos = AgentController.getPosition();
 				const distance = position.sub(aPos).Magnitude;
 				const prio = 1e5 - distance;
 				if (prio > weight) {
@@ -1466,7 +1451,6 @@ namespace TargetingController {
 				}
 			}
 		});
-
 		return best;
 	}
 
@@ -1494,16 +1478,20 @@ namespace TargetingController {
 		Options["targeting.designate.resolve"].OnChanged(updateDispositions);
 
 		rayParams = new RaycastParams();
-		rayParams.FilterType = Enum.RaycastFilterType.Exclude;
+		rayParams.FilterDescendantsInstances = [Workspace.WaitForChild("Map"), Workspace.Terrain];
+		rayParams.FilterType = Enum.RaycastFilterType.Include;
 		rayParams.IgnoreWater = true;
 	}
 }
 
 namespace RangedController {
+	let target: EntityComponent | undefined;
+
 	let part: "head" | "torso";
 	let sensitivity: number;
 	let need_target: boolean;
 	let silent_enabled: boolean;
+	let aimbot_enabled: boolean;
 
 	let _keybind: Elements.KeyPicker;
 
@@ -1522,18 +1510,20 @@ namespace RangedController {
 		return new Vector3();
 	};
 
-	const getTarget = () => TargetingController.getTarget();
+	const getTarget = TargetingController.getTarget;
 
 	const onRender = () => {
-		if (_keybind.GetState()) {
+		if (need_target) {
 			const target = getTarget();
 			if (target) {
-				const mousePosition = UserInputService.GetMouseLocation();
-				const [viewportPoint] = Camera.WorldToViewportPoint(predict(target));
-				mousemoverel(
-					(viewportPoint.X - mousePosition.X) * sensitivity,
-					(viewportPoint.Y - mousePosition.Y) * sensitivity,
-				);
+				if (aimbot_enabled && _keybind.GetState()) {
+					const mousePosition = UserInputService.GetMouseLocation();
+					const [viewportPoint] = Camera.WorldToViewportPoint(predict(target));
+					mousemoverel(
+						(viewportPoint.X - mousePosition.X) * sensitivity,
+						(viewportPoint.Y - mousePosition.Y) * sensitivity,
+					);
+				}
 			}
 		}
 	};
@@ -1541,14 +1531,10 @@ namespace RangedController {
 	export function __init() {
 		_keybind = Options["gameplay.ranged.keybind"];
 
-		let aimConnection: RBXScriptConnection | undefined;
-
 		const aimbot = Toggles["gameplay.ranged.aimbot"];
 		const silent = Toggles["gameplay.ranged.silent"];
 		aimbot.OnChanged((value) => {
 			need_target = value || silent.Value;
-			if (value) aimConnection = RunService.RenderStepped.Connect(() => onRender());
-			else aimConnection?.Disconnect();
 		});
 		silent.OnChanged((value) => {
 			silent_enabled = value;
@@ -1562,8 +1548,9 @@ namespace RangedController {
 			sensitivity = value / 100;
 		});
 
-		const enabled = () => silent_enabled && _keybind.GetState();
+		RunService.RenderStepped.Connect(() => onRender());
 
+		const enabled = () => silent_enabled && _keybind.GetState();
 		const getMouseHitPosition = RaycastUtilClient.getMouseHitPosition;
 		const old: typeof getMouseHitPosition = hookfunction(getMouseHitPosition, (...args) => {
 			if (enabled()) {
@@ -1596,12 +1583,12 @@ namespace VisualsController {
 		Options["visuals.player_esp.enemy_color"].OnChanged(updateEntityVisuals);
 
 		let _circle = false;
-		Toggles["visuals.misc.circle"].OnChanged((value) => {
+		Toggles["visuals.aimbot.circle"].OnChanged((value) => {
 			circle.Visible = value;
 			_circle = value;
 		});
 
-		const _color = Options["visuals.misc.circle_color"];
+		const _color = Options["visuals.aimbot.circle_color"];
 		_color.OnChanged(() => {
 			circle.Color = _color.Value;
 			circle.Transparency = 1 - _color.Transparency;
@@ -1839,15 +1826,25 @@ new Builder()
 						]),
 					])
 					.right([
-						new Groupbox().title("Miscellaneous").elements([
-							new Toggle("visuals.misc.circle")
+						new Groupbox().title("Aimbot").elements([
+							new Toggle("visuals.aimbot.circle")
 								.title("Show FOV Circle")
 								.tooltip("Draws a circle around the cursor")
 								.default(true)
 								.extensions([
-									new ColorPicker("visuals.misc.circle_color")
+									new ColorPicker("visuals.aimbot.circle_color")
 										.title("Circle Color")
 										.transparency(0.5)
+										.default(Color3.fromRGB(255, 255, 255)),
+								]),
+							new Toggle("visuals.aimbot.indicator")
+								.title("Show Aimbot Indicator")
+								.tooltip("Draws an indicator on the target")
+								.default(true)
+								.extensions([
+									new ColorPicker("visuals.aimbot.indicator_color")
+										.title("Indicator Color")
+										.transparency(0)
 										.default(Color3.fromRGB(255, 255, 255)),
 								]),
 						]),
@@ -1871,7 +1868,8 @@ interface Toggles {
 	"visuals.player_esp.enabled": Elements.Toggle;
 	"visuals.player_esp.ally_enabled": Elements.Toggle;
 	"visuals.player_esp.enemy_enabled": Elements.Toggle;
-	"visuals.misc.circle": Elements.Toggle;
+	"visuals.aimbot.circle": Elements.Toggle;
+	"visuals.aimbot.indicator": Elements.Toggle;
 }
 interface Options {
 	"gameplay.auto_parry.key": Elements.KeyPicker;
@@ -1893,7 +1891,8 @@ interface Options {
 	"targeting.designate.resolve": Elements.Dropdown<"Resolve as Ally" | "Resolve as Enemy", false>;
 	"visuals.player_esp.ally_color": Elements.ColorPicker;
 	"visuals.player_esp.enemy_color": Elements.ColorPicker;
-	"visuals.misc.circle_color": Elements.ColorPicker;
+	"visuals.aimbot.circle_color": Elements.ColorPicker;
+	"visuals.aimbot.indicator_color": Elements.ColorPicker;
 }
 
 /************************************************************

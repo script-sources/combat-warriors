@@ -522,25 +522,25 @@ do
 	RangeData.utility9 = {
 		name = "Throwable Kunai",
 		speed = 200.0,
-		gravity = -10.0,
+		gravity = 10.0,
 	}
 	-- Longbow
 	RangeData.weapon43 = {
 		name = "Longbow",
 		speed = 200.0,
-		gravity = -10.0,
+		gravity = 10.0,
 	}
 	-- Crossbow
 	RangeData.weapon44 = {
 		name = "Crossbow",
 		speed = 235.0,
-		gravity = -5.0,
+		gravity = 5.0,
 	}
 	-- Heavy Bow
 	RangeData.weapon53 = {
 		name = "Heavy Bow",
 		speed = 400.0,
-		gravity = -10.0,
+		gravity = 10.0,
 	}
 end
 local Keycodes = {}
@@ -1461,9 +1461,13 @@ do
 	end
 	local _antiParry
 	local _ignoreAllies
+	local _nextCancelTime = os.clock()
 	local function __init()
 		_antiParry = Toggles["gameplay.hitbox.anti_parry"]
 		_ignoreAllies = Toggles["gameplay.hitbox.ignore_allies"]
+		local ref = function()
+			return EntityComponent.instances, Disposition.Ally, _ignoreAllies.Value, _antiParry.Value
+		end
 		local onSlashRayHit = MeleeWeaponClient.onSlashRayHit
 		local old
 		old = hookfunction(onSlashRayHit, function(_self, hitbox, instance, rayResult, ...)
@@ -1488,11 +1492,19 @@ do
 						parent = parent.Parent
 					end
 				until not (parent ~= Container)
-				local _instances = EntityComponent.instances
+				-- Check if entity is an ally and if they are parrying
+				local instances, ally, _ignoreAllies, _antiParry = ref()
 				local _entity = entity
-				local component = _instances[_entity]
+				local component = instances[_entity]
 				if component then
-					if component:isParrying() and _antiParry.Value then
+					if _ignoreAllies and component:getDisposition() == ally then
+						return nil
+					elseif component:isParrying() and _antiParry then
+						local t = os.clock()
+						if _nextCancelTime < t then
+							_nextCancelTime = t + 0.25
+							simulateKeycode(Enum.KeyCode.X)
+						end
 						return nil
 					end
 				end
@@ -1657,15 +1669,40 @@ local RangedController = {}
 do
 	local _container = RangedController
 	local target
+	local aim_position
 	local part
 	local sensitivity
 	local need_target
 	local silent_enabled
 	local aimbot_enabled
 	local _keybind
-	local flat = Vector3.new(1, 0, 1)
+	local calculateLaunch = function(target, speed, gravity)
+		local _binding_1 = target
+		local x = _binding_1.X
+		local y = _binding_1.Y
+		local z = _binding_1.Z
+		local speed_squared = speed ^ 2
+		local gravity_squared = gravity ^ 2
+		local component = 0.5 * speed_squared ^ 2 - speed_squared * gravity * y - 0.5 * gravity_squared * (x ^ 2 + z ^ 2)
+		if component < 0 then
+			return nil
+		end
+		local constant = 2 * (speed_squared - gravity * y)
+		local discriminant = 2 * math.sqrt(2 * component)
+		local t_squared = (constant - discriminant) / gravity_squared
+		if t_squared < 0 then
+			t_squared = (constant + discriminant) / gravity_squared
+			if t_squared < 0 then
+				return nil
+			end
+		end
+		local t = math.sqrt(t_squared)
+		return Vector3.new(x / t, (y + 0.5 * gravity * t ^ 2) / t, z / t), t
+	end
 	local predict = function(target)
 		if target then
+			local hit = target[part]
+			local humanoid = target.humanoid
 			local _result = rangeData
 			if _result ~= nil then
 				_result = _result.speed
@@ -1683,24 +1720,39 @@ do
 				_condition_1 = 0
 			end
 			local speed, gravity = _condition, _condition_1
-			local hit = target[part]
+			local _moveDirection = humanoid.MoveDirection
+			local _walkSpeed = humanoid.WalkSpeed
+			local velocity = _moveDirection * _walkSpeed
 			local position = hit.Position
 			local aPosition = AgentController.getPosition()
-			local travelTime = ((position - aPosition) * flat).Magnitude / speed
-			local dip = (gravity * travelTime ^ 2) / 2
-			local _vector3 = Vector3.new(0, dip, 0)
-			return position - _vector3
+			local distance = (position - aPosition).Magnitude
+			local falseTime = math.max(0.7 * (distance / speed), 0)
+			local _arg0 = velocity * falseTime
+			local future = position + _arg0
+			local relative = future - aPosition
+			local launch = calculateLaunch(relative, speed, gravity)
+			if launch then
+				local _arg0_1 = launch[1] * distance
+				return position + _arg0_1
+			end
 		end
-		return Vector3.new()
 	end
 	local getTarget = TargetingController.getTarget
 	local onRender = function()
 		if need_target then
 			local target = getTarget()
-			if target then
-				if aimbot_enabled and _keybind:GetState() then
-					local mousePosition = UserInputService:GetMouseLocation()
-					local viewportPoint = Camera:WorldToViewportPoint(predict(target))
+			if not target then
+				return nil
+			end
+			aim_position = predict(target)
+			if not aim_position then
+				return nil
+			end
+			if aimbot_enabled and _keybind:GetState() then
+				local mousePosition = UserInputService:GetMouseLocation()
+				local position = predict(target)
+				if position then
+					local viewportPoint = Camera:WorldToViewportPoint(position)
 					mousemoverel((viewportPoint.X - mousePosition.X) * sensitivity, (viewportPoint.Y - mousePosition.Y) * sensitivity)
 				end
 			end
@@ -1734,9 +1786,8 @@ do
 		old = hookfunction(getMouseHitPosition, function(...)
 			local args = { ... }
 			if enabled() then
-				local target = getTarget()
-				if target then
-					return target[part], predict(target)
+				if target and aim_position then
+					return target[part], aim_position
 				end
 			end
 			return old(unpack(args))

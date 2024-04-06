@@ -515,25 +515,25 @@ const RangeData = new Map<string, RangeData>();
 	RangeData.set("utility9", {
 		name: "Throwable Kunai",
 		speed: 200.0,
-		gravity: -10.0,
+		gravity: 10.0,
 	});
 	// Longbow
 	RangeData.set("weapon43", {
 		name: "Longbow",
 		speed: 200.0,
-		gravity: -10.0,
+		gravity: 10.0,
 	});
 	// Crossbow
 	RangeData.set("weapon44", {
 		name: "Crossbow",
 		speed: 235.0,
-		gravity: -5.0,
+		gravity: 5.0,
 	});
 	// Heavy Bow
 	RangeData.set("weapon53", {
 		name: "Heavy Bow",
 		speed: 400.0,
-		gravity: -10.0,
+		gravity: 10.0,
 	});
 }
 
@@ -1325,9 +1325,13 @@ namespace HitboxController {
 	let _antiParry: Elements.Toggle;
 	let _ignoreAllies: Elements.Toggle;
 
+	let _nextCancelTime = os.clock();
+
 	export function __init() {
 		_antiParry = Toggles["gameplay.hitbox.anti_parry"];
 		_ignoreAllies = Toggles["gameplay.hitbox.ignore_allies"];
+
+		const ref = () => $tuple(EntityComponent.instances, Disposition.Ally, _ignoreAllies.Value, _antiParry.Value);
 
 		const onSlashRayHit = MeleeWeaponClient.onSlashRayHit;
 		const old: typeof onSlashRayHit = hookfunction(onSlashRayHit, (_self, hitbox, instance, rayResult, ...args) => {
@@ -1341,9 +1345,20 @@ namespace HitboxController {
 					entity = parent;
 					parent = parent.Parent!;
 				} while (parent !== Container);
-				const component = EntityComponent.instances.get(entity as Model);
+
+				// Check if entity is an ally and if they are parrying
+				const [instances, ally, _ignoreAllies, _antiParry] = ref();
+				const component = instances.get(entity as Model);
 				if (component) {
-					if (component.isParrying() && _antiParry.Value) return;
+					if (_ignoreAllies && component.getDisposition() === ally) return;
+					else if (component.isParrying() && _antiParry) {
+						const t = os.clock();
+						if (_nextCancelTime < t) {
+							_nextCancelTime = t + 0.25;
+							simulateKeycode(Enum.KeyCode.X);
+						}
+						return;
+					}
 				}
 			}
 
@@ -1486,6 +1501,7 @@ namespace TargetingController {
 
 namespace RangedController {
 	let target: EntityComponent | undefined;
+	let aim_position: Vector3 | undefined;
 
 	let part: "head" | "torso";
 	let sensitivity: number;
@@ -1495,19 +1511,45 @@ namespace RangedController {
 
 	let _keybind: Elements.KeyPicker;
 
-	const flat = new Vector3(1, 0, 1);
+	const calculateLaunch = (target: Vector3, speed: number, gravity: number) => {
+		const { X: x, Y: y, Z: z } = target;
+		const speed_squared = speed ** 2;
+		const gravity_squared = gravity ** 2;
+
+		const component =
+			0.5 * speed_squared ** 2 - speed_squared * gravity * y - 0.5 * gravity_squared * (x ** 2 + z ** 2);
+		if (component < 0) return;
+
+		const constant = 2 * (speed_squared - gravity * y);
+		const discriminant = 2 * math.sqrt(2 * component);
+		let t_squared = (constant - discriminant) / gravity_squared;
+		if (t_squared < 0) {
+			t_squared = (constant + discriminant) / gravity_squared;
+			if (t_squared < 0) return;
+		}
+
+		const t = math.sqrt(t_squared);
+		return $tuple(new Vector3(x / t, (y + 0.5 * gravity * t ** 2) / t, z / t), t);
+	};
 
 	const predict = (target: EntityComponent) => {
 		if (target) {
-			const [speed, gravity] = [rangeData?.speed ?? 1e3, rangeData?.gravity ?? 0];
 			const hit = target[part];
+			const humanoid = target.humanoid;
+			const [speed, gravity] = [rangeData?.speed ?? 1e3, rangeData?.gravity ?? 0];
+
+			const velocity = humanoid.MoveDirection.mul(humanoid.WalkSpeed);
 			const position = hit.Position;
 			const aPosition = AgentController.getPosition();
-			const travelTime = position.sub(aPosition).mul(flat).Magnitude / speed;
-			const dip = (gravity * travelTime ** 2) / 2;
-			return position.sub(new Vector3(0, dip, 0));
+
+			const distance = position.sub(aPosition).Magnitude;
+			const falseTime = math.max(0.7 * (distance / speed), 0);
+			const future = position.add(velocity.mul(falseTime));
+
+			const relative = future.sub(aPosition);
+			const launch = calculateLaunch(relative, speed, gravity);
+			if (launch) return position.add(launch[0].mul(distance));
 		}
-		return new Vector3();
 	};
 
 	const getTarget = TargetingController.getTarget;
@@ -1515,10 +1557,15 @@ namespace RangedController {
 	const onRender = () => {
 		if (need_target) {
 			const target = getTarget();
-			if (target) {
-				if (aimbot_enabled && _keybind.GetState()) {
-					const mousePosition = UserInputService.GetMouseLocation();
-					const [viewportPoint] = Camera.WorldToViewportPoint(predict(target));
+			if (!target) return;
+			aim_position = predict(target);
+			if (!aim_position) return;
+
+			if (aimbot_enabled && _keybind.GetState()) {
+				const mousePosition = UserInputService.GetMouseLocation();
+				const position = predict(target);
+				if (position) {
+					const [viewportPoint] = Camera.WorldToViewportPoint(position);
 					mousemoverel(
 						(viewportPoint.X - mousePosition.X) * sensitivity,
 						(viewportPoint.Y - mousePosition.Y) * sensitivity,
@@ -1554,9 +1601,8 @@ namespace RangedController {
 		const getMouseHitPosition = RaycastUtilClient.getMouseHitPosition;
 		const old: typeof getMouseHitPosition = hookfunction(getMouseHitPosition, (...args) => {
 			if (enabled()) {
-				const target = getTarget();
-				if (target) {
-					return $tuple(target[part], predict(target));
+				if (target && aim_position) {
+					return $tuple(target[part], aim_position);
 				}
 			}
 			return old(...args);
